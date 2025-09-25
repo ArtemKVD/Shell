@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log"
+	"io"
 	"os"
 	"strings"
 )
@@ -15,10 +15,14 @@ func main() {
 	for {
 		fmt.Fprint(os.Stdout, "$ ")
 		command, err := bufio.NewReader(os.Stdin).ReadString('\n')
-		if err != nil {
-			log.Println("Reader error")
-		}
+		//if err != nil {
+		//	log.Println("Reader error")
+		//}
 		if strings.TrimSpace(command) == "exit 0" {
+			fmt.Println(command)
+			os.Exit(0)
+		}
+		if strings.TrimSpace(command) == "/q" {
 			fmt.Println(command)
 			os.Exit(0)
 		}
@@ -26,14 +30,17 @@ func main() {
 			fmt.Println(command[4:])
 		}
 
-		if command[:4] == "type" {
+		if len(command) >= 4 && command[:4] == "type" {
 			if strings.Contains(command, "echo") {
 				fmt.Printf("echo is a shell builtin")
 			}
 			if strings.Contains(command, "exit") {
 				fmt.Printf("exit is a shell builtin")
 			}
-
+		}
+		if err == io.EOF {
+			fmt.Println("Ctrl+D")
+			os.Exit(0)
 		}
 		//fmt.Println(command[:len(command)-1] + ": command not found")
 	}
