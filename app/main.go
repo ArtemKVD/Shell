@@ -12,12 +12,23 @@ import (
 var _ = fmt.Fprint
 
 func main() {
+	file, err := os.OpenFile("../kubsh_history.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Println("Error open file")
+	}
+	defer file.Close()
+
 	for {
 		fmt.Fprint(os.Stdout, "$ ")
 		command, err := bufio.NewReader(os.Stdin).ReadString('\n')
-		//if err != nil {
-		//	log.Println("Reader error")
-		//}
+		if err != nil && err != io.EOF {
+			fmt.Println("Reader error")
+		}
+		_, errf := file.WriteString(command)
+		if errf != nil {
+			fmt.Println("History write error")
+		}
+
 		if strings.TrimSpace(command) == "exit 0" {
 			fmt.Println(command)
 			os.Exit(0)
@@ -32,10 +43,10 @@ func main() {
 
 		if len(command) >= 4 && command[:4] == "type" {
 			if strings.Contains(command, "echo") {
-				fmt.Printf("echo is a shell builtin")
+				fmt.Println("echo is a shell builtin")
 			}
 			if strings.Contains(command, "exit") {
-				fmt.Printf("exit is a shell builtin")
+				fmt.Println("exit is a shell builtin")
 			}
 		}
 		if err == io.EOF {
