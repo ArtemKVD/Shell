@@ -6,11 +6,23 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 
 	"github.com/joho/godotenv"
+	"github.com/shirou/gopsutil/disk"
 )
+
+type UserInfo struct {
+	Username string
+	Uid      string
+	Gid      string
+	Name     string
+	HomeDir  string
+	Shell    string
+}
 
 func HistoryWriter(command string, file *os.File) error {
 	_, err := file.WriteString(command)
@@ -51,12 +63,115 @@ func Type(command string) {
 	}
 }
 
+func DiskInfo(command string) {
+	parts := strings.Fields(command)
+	device := "/dev/sda"
+	if len(parts) > 1 {
+		device = parts[1]
+	}
+
+	partitions, err := disk.Partitions(false)
+	if err != nil {
+		fmt.Println("Error getting disk info: ", err)
+		return
+	}
+
+	tf := false
+	for _, partition := range partitions {
+		if partition.Device == device || strings.HasPrefix(partition.Device, device) {
+			if strings.Contains(partition.Mountpoint, "/boot") || strings.Contains(partition.Mountpoint, "/efi") || strings.Contains(partition.Mountpoint, "/EFI") {
+				tf = true
+				break
+			}
+		}
+		if partition.Fstype == "vfat" || partition.Fstype == "efi" {
+			tf = true
+			break
+		}
+	}
+
+	if tf {
+		fmt.Println("Disk loaded")
+	} else {
+		fmt.Println("disk not loaded")
+	}
+}
+
+func SetupUsersVFS() error {
+	if err := os.MkdirAll("Users", 0755); err != nil {
+		return err
+	}
+
+	users, err := getSystemUsers()
+	if err != nil {
+		return err
+	}
+
+	for _, u := range users {
+		userDir := filepath.Join("Users", u.Username)
+		if err := os.MkdirAll(userDir, 0755); err != nil {
+			continue
+		}
+
+		if err := os.WriteFile(filepath.Join(userDir, "id"),
+			[]byte(u.Uid), 0644); err != nil {
+			continue
+		}
+
+		if err := os.WriteFile(filepath.Join(userDir, "home"),
+			[]byte(u.HomeDir), 0644); err != nil {
+			continue
+		}
+
+		if err := os.WriteFile(filepath.Join(userDir, "shell"),
+			[]byte(u.Shell), 0644); err != nil {
+			continue
+		}
+	}
+	return nil
+}
+
+func getSystemUsers() ([]UserInfo, error) {
+	var users []UserInfo
+	file, err := os.Open("/etc/passwd")
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fields := strings.Split(line, ":")
+		if len(fields) >= 7 {
+			uid := fields[2]
+			if uidInt, err := strconv.Atoi(uid); err == nil && uidInt >= 1000 {
+				users = append(users, UserInfo{
+					Username: fields[0],
+					Uid:      uid,
+					Gid:      fields[3],
+					Name:     fields[4],
+					HomeDir:  fields[5],
+					Shell:    fields[6],
+				})
+			}
+		}
+	}
+
+	return users, scanner.Err()
+}
+
 func CommandHandler() {
 	file, err := os.OpenFile("../kubsh_history.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("Error open file")
 	}
 	defer file.Close()
+
+	err = SetupUsersVFS()
+	if err != nil {
+		fmt.Println("Error setting VFS:", err)
+	}
 	for {
 		fmt.Fprint(os.Stdout, "$ ")
 		command, err := bufio.NewReader(os.Stdin).ReadString('\n')
@@ -89,6 +204,8 @@ func CommandHandler() {
 			process, _ := os.FindProcess(os.Getpid())
 			process.Signal(syscall.SIGHUP)
 			continue
+		case strings.TrimSpace(command) == "/l /dev/sda":
+			DiskInfo(command)
 		default:
 			fmt.Println(command[:len(command)-1] + ": command not found")
 		}
