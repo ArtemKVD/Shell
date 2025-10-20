@@ -255,7 +255,9 @@ func CommandHandler() {
 		fmt.Println("Error setting VFS:", err)
 	}
 	for {
-		fmt.Fprint(os.Stdout, "$ ")
+		if !testflag {
+			fmt.Fprint(os.Stdout, "$ ")
+		}
 		command, err := bufio.NewReader(os.Stdin).ReadString('\n')
 		if err != nil && err != io.EOF {
 			fmt.Println("Reader error")
@@ -300,8 +302,15 @@ func CommandHandler() {
 			UserCommand(command)
 			Ex(testflag)
 		default:
-			fmt.Println(command + ": command not found")
-			Ex(testflag)
+			if !testflag {
+				fmt.Println(command + ": command not found")
+			} else {
+				с := strings.TrimSpace(command)
+				if с != "" {
+					fmt.Printf("%s: command not found\n", с)
+				}
+				Ex(testflag)
+			}
 		}
 	}
 }
