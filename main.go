@@ -53,6 +53,9 @@ func Exit() {
 }
 
 func Echo(command string) {
+	text := strings.TrimSpace(command[6:])
+	text = strings.ReplaceAll(text, "'", "")
+	fmt.Println(text)
 	fmt.Println(strings.TrimSpace(command[6:]))
 }
 
