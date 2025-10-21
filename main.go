@@ -12,7 +12,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/joho/godotenv"
 	"github.com/shirou/gopsutil/disk"
 )
 
@@ -59,18 +58,27 @@ func Echo(command string) {
 	fmt.Println(strings.TrimSpace(command[6:]))
 }
 
-func Env(command string) error {
-	err := godotenv.Load()
-	if strings.Contains(command, ":") {
+func Env(command string) {
+	e := strings.TrimSpace(command[3:])
+	if strings.Contains(e, "$PATH") {
+		path := os.Getenv("PATH")
+		paths := strings.Split(path, ":")
+		for _, p := range paths {
+			if p != "" {
+				fmt.Println(p)
+			}
+		}
+	} else if strings.Contains(e, ":") {
 		envs := os.Environ()
 		for _, e := range envs {
 			fmt.Println(e)
 		}
 	} else {
-		path := strings.TrimSpace(command[4:])
-		fmt.Println(os.Getenv(path))
+		vrb := strings.TrimPrefix(e, "$")
+		vrb = strings.TrimSpace(vrb)
+		value := os.Getenv(vrb)
+		fmt.Println(value)
 	}
-	return err
 }
 
 func UserCommand(command string) {
@@ -279,10 +287,7 @@ func CommandHandler() {
 			Echo(command)
 			Ex(testflag)
 		case strings.HasPrefix(command, "\\e"):
-			err := Env(command)
-			if err != nil {
-				fmt.Println("Godotenv load error")
-			}
+			Env(command)
 			Ex(testflag)
 		case strings.HasPrefix(command, "exec "):
 			ExecuteBinary(command)
