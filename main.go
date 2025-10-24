@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -185,14 +184,15 @@ func DiskInfo(command string) {
 }
 
 func SetupUsersVFS() error {
-	home, err := os.UserHomeDir()
+	/*home, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
 	usersDir := filepath.Join(home, "users")
 	if err := os.MkdirAll(usersDir, 0755); err != nil {
 		return err
-	}
+	}*/
+	usersDir := "/opt/users"
 
 	users, err := getSystemUsers()
 	if err != nil {
@@ -237,7 +237,8 @@ func getSystemUsers() ([]UserInfo, error) {
 		fields := strings.Split(line, ":")
 		if len(fields) >= 7 {
 			uid := fields[2]
-			if uidInt, err := strconv.Atoi(uid); err == nil && uidInt >= 1000 {
+			shell := fields[6]
+			if strings.Contains(shell, "bash") || strings.Contains(shell, "sh") && !strings.Contains(shell, "nologin") && !strings.Contains(shell, "false") {
 				users = append(users, UserInfo{
 					Username: fields[0],
 					Uid:      uid,
@@ -289,7 +290,7 @@ func CommandHandler() {
 		case strings.HasPrefix(command, "\\e"):
 			Env(command)
 			Ex(testflag)
-		case strings.HasPrefix(command, "exec "):
+		case strings.HasPrefix(command, "cat "):
 			ExecuteBinary(command)
 			Ex(testflag)
 		case len(command) >= 4 && command[:4] == "type":
