@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/shirou/gopsutil/disk"
 )
@@ -54,7 +55,6 @@ func Echo(command string) {
 	text := strings.TrimSpace(command[6:])
 	text = strings.ReplaceAll(text, "'", "")
 	fmt.Println(text)
-	fmt.Println(strings.TrimSpace(command[6:]))
 }
 
 func Env(command string) {
@@ -85,7 +85,7 @@ func UserCommand(command string) {
 
 	switch parts[0] {
 	case "adduser":
-		cmd := exec.Command("sudo", "useradd", "-m", parts[1])
+		cmd := exec.Command("useradd", "-m", parts[1])
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -94,7 +94,7 @@ func UserCommand(command string) {
 			SetupUsersVFS()
 		}
 	case "userdel":
-		cmd := exec.Command("sudo", "userdel", "-r", parts[1])
+		cmd := exec.Command("userdel", "-r", parts[1])
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -223,6 +223,64 @@ func SetupUsersVFS() error {
 	return nil
 }
 
+func watchVFS(usersDir string) {
+	knownDirs := make(map[string]bool)
+	if entries, err := os.ReadDir(usersDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() {
+				knownDirs[entry.Name()] = true
+			}
+		}
+	}
+
+	for {
+		entries, err := os.ReadDir(usersDir)
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				username := entry.Name()
+				if !knownDirs[username] {
+					knownDirs[username] = true
+					createUserFromVFS(username)
+				}
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
+func createUserFromVFS(username string) {
+	userEntry := fmt.Sprintf("%s:x:10000:10000:VFS User:/home/%s:/bin/bash\n", username, username)
+
+	f, err := os.OpenFile("/etc/passwd", os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	_, err = f.WriteString(userEntry)
+	if err != nil {
+		return
+	}
+
+	err = f.Sync()
+	if err != nil {
+		return
+	}
+
+	usersDir := "/opt/users"
+	userDir := filepath.Join(usersDir, username)
+	os.WriteFile(filepath.Join(userDir, "id"), []byte("10000"), 0644)
+	os.WriteFile(filepath.Join(userDir, "home"), []byte("/home/"+username), 0644)
+	os.WriteFile(filepath.Join(userDir, "shell"), []byte("/bin/bash"), 0644)
+
+	time.Sleep(10 * time.Millisecond)
+}
+
 func getSystemUsers() ([]UserInfo, error) {
 	var users []UserInfo
 	file, err := os.Open("/etc/passwd")
@@ -261,7 +319,7 @@ func CommandHandler() {
 		fmt.Println("Error open file")
 	}
 	defer file.Close()
-
+	go watchVFS("/opt/users")
 	err = SetupUsersVFS()
 	if err != nil {
 		fmt.Println("Error setting VFS:", err)
