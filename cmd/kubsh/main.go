@@ -345,32 +345,39 @@ func createUserFromVFS(username string) {
 	userEntry := fmt.Sprintf("%s:x:10000:10000:VFS User:/home/%s:/bin/bash\n", username, username)
 
 	f, err := os.OpenFile("/etc/passwd", os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		usersDir := getVFSDir()
-		userDir := filepath.Join(usersDir, username)
-		os.MkdirAll(userDir, 0755)
-		os.WriteFile(filepath.Join(userDir, "id"), []byte("10000"), 0644)
-		os.WriteFile(filepath.Join(userDir, "home"), []byte("/home/"+username), 0644)
-		os.WriteFile(filepath.Join(userDir, "shell"), []byte("/bin/bash"), 0644)
-		return
-	}
-	defer f.Close()
-
-	_, err = f.WriteString(userEntry)
-	if err != nil {
+	if err == nil {
+		_, err = f.WriteString(userEntry)
+		if err == nil {
+			f.Sync()
+			f.Close()
+			usersDir := getVFSDir()
+			userDir := filepath.Join(usersDir, username)
+			os.MkdirAll(userDir, 0755)
+			os.WriteFile(filepath.Join(userDir, "id"), []byte("10000"), 0644)
+			os.WriteFile(filepath.Join(userDir, "home"), []byte("/home/"+username), 0644)
+			os.WriteFile(filepath.Join(userDir, "shell"), []byte("/bin/bash"), 0644)
+			time.Sleep(10 * time.Millisecond)
+			return
+		}
 		f.Close()
-		usersDir := getVFSDir()
-		userDir := filepath.Join(usersDir, username)
-		os.MkdirAll(userDir, 0755)
-		os.WriteFile(filepath.Join(userDir, "id"), []byte("10000"), 0644)
-		os.WriteFile(filepath.Join(userDir, "home"), []byte("/home/"+username), 0644)
-		os.WriteFile(filepath.Join(userDir, "shell"), []byte("/bin/bash"), 0644)
-		return
 	}
 
-	err = f.Sync()
-	if err != nil {
-
+	cmd := exec.Command("sh", "-c", fmt.Sprintf("echo '%s' | sudo tee -a /etc/passwd > /dev/null", strings.TrimSpace(userEntry)))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		cmd2 := exec.Command("sudo", "useradd", "-m", "-s", "/bin/bash", "-u", "10000", username)
+		cmd2.Stdout = os.Stdout
+		cmd2.Stderr = os.Stderr
+		if err2 := cmd2.Run(); err2 != nil {
+			usersDir := getVFSDir()
+			userDir := filepath.Join(usersDir, username)
+			os.MkdirAll(userDir, 0755)
+			os.WriteFile(filepath.Join(userDir, "id"), []byte("10000"), 0644)
+			os.WriteFile(filepath.Join(userDir, "home"), []byte("/home/"+username), 0644)
+			os.WriteFile(filepath.Join(userDir, "shell"), []byte("/bin/bash"), 0644)
+			return
+		}
 	}
 
 	usersDir := getVFSDir()
