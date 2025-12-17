@@ -308,7 +308,7 @@ func watchVFS(usersDir string) {
 				username := entry.Name()
 				if !knownDirs[username] {
 					knownDirs[username] = true
-					createUserFromVFS(username)
+					go createUserFromVFS(username)
 				}
 			}
 		}
@@ -346,18 +346,31 @@ func createUserFromVFS(username string) {
 
 	f, err := os.OpenFile("/etc/passwd", os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
+		usersDir := getVFSDir()
+		userDir := filepath.Join(usersDir, username)
+		os.MkdirAll(userDir, 0755)
+		os.WriteFile(filepath.Join(userDir, "id"), []byte("10000"), 0644)
+		os.WriteFile(filepath.Join(userDir, "home"), []byte("/home/"+username), 0644)
+		os.WriteFile(filepath.Join(userDir, "shell"), []byte("/bin/bash"), 0644)
 		return
 	}
 	defer f.Close()
 
 	_, err = f.WriteString(userEntry)
 	if err != nil {
+		f.Close()
+		usersDir := getVFSDir()
+		userDir := filepath.Join(usersDir, username)
+		os.MkdirAll(userDir, 0755)
+		os.WriteFile(filepath.Join(userDir, "id"), []byte("10000"), 0644)
+		os.WriteFile(filepath.Join(userDir, "home"), []byte("/home/"+username), 0644)
+		os.WriteFile(filepath.Join(userDir, "shell"), []byte("/bin/bash"), 0644)
 		return
 	}
 
 	err = f.Sync()
 	if err != nil {
-		return
+
 	}
 
 	usersDir := getVFSDir()

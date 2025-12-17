@@ -25,11 +25,15 @@ jobs:
       - name: Build deb package
         run: make deb
       
+      - name: Find and copy deb package
+        run: |
+          find .. -maxdepth 1 -name "kubsh_*.deb" -exec cp {} . \;
+      
       - name: Upload deb package
         uses: actions/upload-artifact@v4
         with:
           name: deb-package
-          path: ../kubsh_*.deb
+          path: kubsh_*.deb
           retention-days: 7
 
   test:
