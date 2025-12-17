@@ -1,0 +1,68 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y debhelper build-essential fakeroot
+      
+      - name: Build deb package
+        run: make deb
+      
+      - name: Upload deb package
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-package
+          path: ../kubsh_*.deb
+          retention-days: 7
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make libreadline-dev libfuse3-dev
+      
+      - name: Install Python dependencies
+        run: |
+          cd tests
+          pip install -r requirements.txt
+      
+      - name: Build and install kubsh
+        run: |
+          make build
+          sudo cp kubsh /usr/local/bin/
+      
+      - name: Run tests
+        run: |
+          cd tests
+          pytest -v --log-cli-level=10 .

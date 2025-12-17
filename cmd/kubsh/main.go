@@ -150,6 +150,40 @@ func Type(command string) {
 }
 
 func DiskInfo(command string) {
+	/*
+		parts := strings.Fields(command)
+		device := "/dev/sda"
+		if len(parts) > 1 {
+			device = parts[1]
+		}
+
+		partitions, err := disk.Partitions(false)
+		if err != nil {
+			fmt.Println("Error getting disk info: ", err)
+			return
+		}
+
+		tf := false
+		for _, partition := range partitions {
+			if partition.Device == device || strings.HasPrefix(partition.Device, device) {
+				if strings.Contains(partition.Mountpoint, "/boot") || strings.Contains(partition.Mountpoint, "/efi") || strings.Contains(partition.Mountpoint, "/EFI") {
+					tf = true
+					break
+				}
+			}
+			if partition.Fstype == "vfat" || partition.Fstype == "efi" {
+				tf = true
+				break
+			}
+		}
+
+		if tf {
+			fmt.Println("Disk loaded")
+		} else {
+			fmt.Println("disk not loaded")
+		}
+	*/
+
 	parts := strings.Fields(command)
 	device := "/dev/sda"
 	if len(parts) > 1 {
@@ -158,28 +192,37 @@ func DiskInfo(command string) {
 
 	partitions, err := disk.Partitions(false)
 	if err != nil {
-		fmt.Println("Error getting disk info: ", err)
+		fmt.Printf("Error getting disk info: %v\n", err)
 		return
 	}
 
-	tf := false
+	found := false
 	for _, partition := range partitions {
 		if partition.Device == device || strings.HasPrefix(partition.Device, device) {
-			if strings.Contains(partition.Mountpoint, "/boot") || strings.Contains(partition.Mountpoint, "/efi") || strings.Contains(partition.Mountpoint, "/EFI") {
-				tf = true
+			found = true
+
+			usage, err := disk.Usage(partition.Mountpoint)
+			if err != nil {
+				fmt.Printf("Device: %s\n", partition.Device)
+				fmt.Printf("Mountpoint: %s\n", partition.Mountpoint)
+				fmt.Printf("Filesystem: %s\n", partition.Fstype)
+				fmt.Printf("Error getting usage: %v\n", err)
 				break
 			}
-		}
-		if partition.Fstype == "vfat" || partition.Fstype == "efi" {
-			tf = true
+
+			fmt.Printf("Device: %v\n", partition.Device)
+			fmt.Printf("Mountpoint: %v\n", partition.Mountpoint)
+			fmt.Printf("Filesystem: %v\n", partition.Fstype)
+			fmt.Printf("Total: %v\n", float64(usage.Total))
+			fmt.Printf("Used: %v\n", float64(usage.Used))
+			fmt.Printf("Free: %v\n", float64(usage.Free))
+
 			break
 		}
 	}
 
-	if tf {
-		fmt.Println("Disk loaded")
-	} else {
-		fmt.Println("disk not loaded")
+	if !found {
+		fmt.Printf("Device %s not found\n", device)
 	}
 }
 
@@ -254,6 +297,31 @@ func watchVFS(usersDir string) {
 }
 
 func createUserFromVFS(username string) {
+	file, err := os.Open("/etc/passwd")
+	if err != nil {
+		return
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fields := strings.Split(line, ":")
+		if len(fields) > 0 && fields[0] == username {
+			usersDir := "/opt/users"
+			userDir := filepath.Join(usersDir, username)
+			if _, err := os.Stat(userDir); os.IsNotExist(err) {
+				os.MkdirAll(userDir, 0755)
+				if len(fields) >= 7 {
+					os.WriteFile(filepath.Join(userDir, "id"), []byte(fields[2]), 0644)
+					os.WriteFile(filepath.Join(userDir, "home"), []byte(fields[5]), 0644)
+					os.WriteFile(filepath.Join(userDir, "shell"), []byte(fields[6]), 0644)
+				}
+			}
+			return
+		}
+	}
+
 	userEntry := fmt.Sprintf("%s:x:10000:10000:VFS User:/home/%s:/bin/bash\n", username, username)
 
 	f, err := os.OpenFile("/etc/passwd", os.O_APPEND|os.O_WRONLY, 0644)
@@ -274,6 +342,7 @@ func createUserFromVFS(username string) {
 
 	usersDir := "/opt/users"
 	userDir := filepath.Join(usersDir, username)
+	os.MkdirAll(userDir, 0755)
 	os.WriteFile(filepath.Join(userDir, "id"), []byte("10000"), 0644)
 	os.WriteFile(filepath.Join(userDir, "home"), []byte("/home/"+username), 0644)
 	os.WriteFile(filepath.Join(userDir, "shell"), []byte("/bin/bash"), 0644)
@@ -282,6 +351,7 @@ func createUserFromVFS(username string) {
 }
 
 func getSystemUsers() ([]UserInfo, error) {
+
 	var users []UserInfo
 	file, err := os.Open("/etc/passwd")
 	if err != nil {
@@ -317,6 +387,7 @@ func CommandHandler() {
 	file, err := os.OpenFile(historyPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("Error open file")
+
 	}
 	defer file.Close()
 	go watchVFS("/opt/users")
@@ -335,6 +406,7 @@ func CommandHandler() {
 		err = HistoryWriter(command, file)
 		if err != nil {
 			fmt.Println("History write error")
+
 		}
 		switch true {
 		case strings.TrimSpace(command) == "exit 0":
@@ -362,7 +434,7 @@ func CommandHandler() {
 			process.Signal(syscall.SIGHUP)
 			Ex(testflag)
 			continue
-		case strings.TrimSpace(command) == "/l /dev/sda":
+		case strings.HasPrefix(command, "/l "):
 			DiskInfo(command)
 			Ex(testflag)
 		case command == "adduser" || strings.HasPrefix(command, "userdel"):

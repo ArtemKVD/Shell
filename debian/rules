@@ -1,0 +1,14 @@
+#!/usr/bin/make -f
+
+export DH_AUTO_TEST := 0
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	go build -o kubsh cmd/kubsh/main.go
+
+override_dh_auto_install:
+	mkdir -p $(CURDIR)/debian/kubsh/usr/bin
+	cp kubsh $(CURDIR)/debian/kubsh/usr/bin/kubsh
+	chmod 755 $(CURDIR)/debian/kubsh/usr/bin/kubsh
