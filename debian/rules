@@ -12,3 +12,6 @@ override_dh_auto_install:
 	mkdir -p $(CURDIR)/debian/kubsh/usr/bin
 	cp kubsh $(CURDIR)/debian/kubsh/usr/bin/kubsh
 	chmod 755 $(CURDIR)/debian/kubsh/usr/bin/kubsh
+
+override_dh_dwz:
+	@echo "Skip"

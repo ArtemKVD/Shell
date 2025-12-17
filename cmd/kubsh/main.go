@@ -42,6 +42,31 @@ func getHistoryPath() string {
 	return path
 }
 
+func getVFSDir() string {
+	vfsDir := os.Getenv("VFS_DIR")
+	if vfsDir != "" {
+		return vfsDir
+	}
+
+	cwd, err := os.Getwd()
+	if err == nil {
+		usersDir := filepath.Join(cwd, "users")
+		if info, err := os.Stat(usersDir); err == nil && info.IsDir() {
+			return usersDir
+		}
+		parentDir := filepath.Dir(cwd)
+		usersDir = filepath.Join(parentDir, "users")
+		if info, err := os.Stat(usersDir); err == nil && info.IsDir() {
+			return usersDir
+		}
+		testsUsersDir := filepath.Join(cwd, "tests", "users")
+		if info, err := os.Stat(testsUsersDir); err == nil && info.IsDir() {
+			return testsUsersDir
+		}
+	}
+	return "/opt/users"
+}
+
 func HistoryWriter(command string, file *os.File) error {
 	_, err := file.WriteString(command)
 	return err
@@ -227,15 +252,10 @@ func DiskInfo(command string) {
 }
 
 func SetupUsersVFS() error {
-	/*home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	usersDir := filepath.Join(home, "users")
+	usersDir := getVFSDir()
 	if err := os.MkdirAll(usersDir, 0755); err != nil {
 		return err
-	}*/
-	usersDir := "/opt/users"
+	}
 
 	users, err := getSystemUsers()
 	if err != nil {
@@ -308,7 +328,7 @@ func createUserFromVFS(username string) {
 		line := scanner.Text()
 		fields := strings.Split(line, ":")
 		if len(fields) > 0 && fields[0] == username {
-			usersDir := "/opt/users"
+			usersDir := getVFSDir()
 			userDir := filepath.Join(usersDir, username)
 			if _, err := os.Stat(userDir); os.IsNotExist(err) {
 				os.MkdirAll(userDir, 0755)
@@ -340,7 +360,7 @@ func createUserFromVFS(username string) {
 		return
 	}
 
-	usersDir := "/opt/users"
+	usersDir := getVFSDir()
 	userDir := filepath.Join(usersDir, username)
 	os.MkdirAll(userDir, 0755)
 	os.WriteFile(filepath.Join(userDir, "id"), []byte("10000"), 0644)
@@ -390,7 +410,8 @@ func CommandHandler() {
 
 	}
 	defer file.Close()
-	go watchVFS("/opt/users")
+	vfsDir := getVFSDir()
+	go watchVFS(vfsDir)
 	err = SetupUsersVFS()
 	if err != nil {
 		fmt.Println("Error setting VFS:", err)
